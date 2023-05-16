@@ -86,6 +86,32 @@ impl Canvas {
         }
         Ok(Some(()))
     }
+    pub fn save_(canvas: &mut Canvas) -> Result<Option<()>, Error> {
+        let mut file: File = match canvas.canvas_file {
+            Some(canvas_file) => match canvas_file.file {
+                Some(file) => file,
+                None => {
+                    canvas_file.file = OpenOptions::new().read(true).write(true).create(true).open(&canvas_file.name)?;
+                    canvas_file.file
+                },
+            },
+            None => match input_file_name() {
+                Some(name) => {
+                    canvas_file.name = name;
+                    canvas_file.file = OpenOptions::new().read(true).write(true).create(true).open(&canvas_file.name)?;
+                    canvas_file.file
+                },
+                None => return None,
+            }
+        };
+
+        let mut content: Vec<u8> = bits_to_bytes(&canvas.pixels);
+        content.push(canvas.span[Y] as u8);
+        content.push(canvas.span[X] as u8);
+
+        file.write_all(&content)?;
+        Ok(Some(()))
+    }
 
     // output
     fn cursor_set(canvas: &Canvas) -> Result<(), Error> {
