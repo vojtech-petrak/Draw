@@ -53,7 +53,6 @@ impl Canvas {
             None => return Err(ErrorKind::InvalidData.into()),
         } as usize; 2];
 
-        if content.len() != span[X] * span[Y] { return Err(ErrorKind::InvalidData.into()); }
         return Ok(Canvas {
             canvas_file: Some(CanvasFile { name: name.to_owned(), file: Some(file) } ),
             span,
@@ -63,53 +62,28 @@ impl Canvas {
         });
     }
     pub fn save(canvas: &mut Canvas) -> Result<Option<()>, Error> {
-        let mut content: Vec<u8> = bits_to_bytes(&canvas.pixels);
-        content.push(canvas.span[Y] as u8);
-        content.push(canvas.span[X] as u8);
-
-        if let Some(ref mut canvas_file) = canvas.canvas_file {
-            if let Some(ref mut file) = canvas_file.file {
-                file.write_all(&content)?;
-            } else {
+        match &canvas.canvas_file {
+            Some(canvas_file) => if let None = canvas_file.file {
                 canvas.canvas_file = Some(CanvasFile {
                     name: (&canvas_file.name).to_string(),
                     file: Some(OpenOptions::new().read(true).write(true).create(true).open(&canvas_file.name)?),
                 });
-            }
-        } else if let Some(name) = input_file_name() {
-            canvas.canvas_file = Some( CanvasFile {
-                file: Some(OpenOptions::new().read(true).write(true).create(true).open(&name)?),
-                name,
-            });
-        } else {
-            return Ok(None);
-        }
-        Ok(Some(()))
-    }
-    pub fn save_(canvas: &mut Canvas) -> Result<Option<()>, Error> {
-        let mut file: File = match canvas.canvas_file {
-            Some(canvas_file) => match canvas_file.file {
-                Some(file) => file,
-                None => {
-                    canvas_file.file = OpenOptions::new().read(true).write(true).create(true).open(&canvas_file.name)?;
-                    canvas_file.file
-                },
             },
             None => match input_file_name() {
                 Some(name) => {
-                    canvas_file.name = name;
-                    canvas_file.file = OpenOptions::new().read(true).write(true).create(true).open(&canvas_file.name)?;
-                    canvas_file.file
+                    canvas.canvas_file = Some( CanvasFile {
+                        file: Some(OpenOptions::new().read(true).write(true).create(true).open(&name)?),
+                        name,
+                    });
                 },
-                None => return None,
+                None => return Ok(None),
             }
         };
-
         let mut content: Vec<u8> = bits_to_bytes(&canvas.pixels);
         content.push(canvas.span[Y] as u8);
         content.push(canvas.span[X] as u8);
 
-        file.write_all(&content)?;
+        canvas.canvas_file.as_ref().unwrap().file.as_ref().unwrap().write_all(&content)?;
         Ok(Some(()))
     }
 
@@ -138,10 +112,12 @@ impl Canvas {
         match direction {
             Direction::Start => if canvas.position[axis] != 0 {
                 canvas.position[axis] -= 1;
+                canvas.cursor[axis] -= 1;
             },
             Direction::End => if canvas.position[axis]
             < max(0, canvas.span[axis] as isize - unsafe { SCREEN_SIZE[axis] } as isize) as usize {
                 canvas.position[axis] += 1;
+                canvas.cursor[axis] += 1;
             }
         }
         Canvas::print(canvas);
