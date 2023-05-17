@@ -19,8 +19,8 @@ const FILE_TYPE: &str = ".draw";
 const FILE_TYPE_LENGHT: usize = FILE_TYPE.len();
 
 pub fn print(string: String, purpose: PrintType) {
-    stdout().queue(cursor::MoveTo(0, unsafe { SCREEN_SIZE[Y] } as u16 - purpose as u16 - 2)).unwrap();
-    print!("                                \r{}", string);
+    stdout().queue(cursor::MoveTo(0, unsafe { SCREEN_SIZE[Y] } as u16 - purpose as u16 + 1)).unwrap();
+    print!("                                                                \r{}", string);
     stdout().flush().unwrap();
 }
 pub fn input_usize(property: &str, max: usize) -> Option<usize> {
@@ -45,6 +45,7 @@ pub fn input_usize(property: &str, max: usize) -> Option<usize> {
     }
 }
 pub fn input_file_name() -> Option<String> {
+    print("file name = ".to_owned(), PrintType::Output);
     if let Some(mut file_name) = event_capture(Some("".to_owned())) {
         let file_name_lenght = file_name.len();
         
@@ -63,13 +64,11 @@ pub fn point_to_index(canvas_width: usize, point: &[usize; 2]) -> usize {
 pub fn bytes_to_bits(bytes: &Vec<u8>) -> Vec<bool> {
     let byte_count: usize = bytes.len();
     let mut bits: Vec<bool> = vec![false; byte_count << 3];
-
-    for byte_index in 0..byte_count {
-        for bit_index in 0..8 {
-            bits[(byte_index << 3) + bit_index] = match (bytes[byte_index] >> bit_index) & 1 {
-                1 => true,
-                _ => false,
-            };
+    
+    for bit_index in 0..bits.len() {
+        bits[bit_index] = match (bytes[bit_index >> 3] >> (bit_index & 7)) & 1 {
+            1 => true,
+            _ => false,
         }
     }
     return bits;
@@ -77,11 +76,9 @@ pub fn bytes_to_bits(bytes: &Vec<u8>) -> Vec<bool> {
 pub fn bits_to_bytes(bits: &Vec<bool>) -> Vec<u8> {
     let byte_count: usize = (bits.len() + 7) >> 3;
     let mut bytes: Vec<u8> = vec![0; byte_count];
-
-    for byte_index in 0..byte_count {
-        for bit_index in 0..8 {
-            bytes[byte_index] |= (bits[(byte_index << 3) + bit_index] as u8) << bit_index;
-        }
+    
+    for bit_index in 0..bits.len() {
+        bytes[bit_index >> 3] |= (bits[bit_index] as u8) << (bit_index & 7);
     }
     return bytes;
 }
