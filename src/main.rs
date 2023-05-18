@@ -4,7 +4,7 @@ use crossterm::{
     terminal,
 };
 use draw::{
-    utils::SCREEN_SIZE,
+    utils::{SCREEN_SIZE, print_help},
     event::event_capture,
 };
 
@@ -14,5 +14,7 @@ fn main() {
 
     let (x, y): (u16, u16) = terminal::size().unwrap();
     unsafe { SCREEN_SIZE = [x as usize >> 1, y as usize - 3] }
+
+    print_help();
     event_capture(None);
 }
