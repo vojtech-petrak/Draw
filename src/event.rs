@@ -35,9 +35,9 @@ pub fn event_capture(mut input: Option<String>)  -> Option<String> {
                         };
                         if let Some(direction) = direction {
                             match modifiers {
-                                KeyModifiers::NONE => Canvas::cursor_move(canvas, direction.0, direction.1).unwrap(),
+                                KeyModifiers::NONE => Canvas::cursor_move(canvas, direction.0, direction.1),
                                 KeyModifiers::SHIFT => (),
-                                KeyModifiers::CONTROL => Canvas::shift(canvas, direction.0, direction.1).unwrap(),
+                                KeyModifiers::CONTROL => Canvas::shift(canvas, direction.0, direction.1),
                                 _ => ()
                             }
                             match action {
@@ -66,15 +66,14 @@ pub fn event_capture(mut input: Option<String>)  -> Option<String> {
                                 };
                                 action = Action::Invert;
                             },
-                            _ => ()
+                            _ => (),
                         }
                     } else if kind == KeyEventKind::Release
                     && (code == KeyCode::Insert || code == KeyCode::Delete || code == KeyCode::Char(' ')) {
                         action = Action::None;
                     }
-                    
                 }
-                if (modifiers == KeyModifiers::NONE || modifiers == KeyModifiers::SHIFT || modifiers == KeyModifiers::ALT)
+                if (!modifiers.contains(KeyModifiers::CONTROL) || modifiers.contains(KeyModifiers::ALT))
                 && kind == KeyEventKind::Press {
                     if let Some(ref mut string) = input {
                         match code {
@@ -90,47 +89,62 @@ pub fn event_capture(mut input: Option<String>)  -> Option<String> {
                                 stdout().flush().unwrap();
                             },
                             KeyCode::Enter => return input,
-                            KeyCode::Esc => return None,
+                            KeyCode::Esc => {
+                                print("", PrintType::Input);
+                                return None;
+                            },
                             _ => (),
                         }
                         input = Some(string.to_string());
                     }
-
-                } else if modifiers == KeyModifiers::CONTROL && kind == KeyEventKind::Press {
+                } else if modifiers == KeyModifiers::CONTROL && kind == KeyEventKind::Press && input == None {
                     match code {
                         KeyCode::Char('n') => {
-                            canvas = Canvas::new();
-                            print(if let Some(ref canvas) = canvas {
-                                Canvas::display(&canvas);
-                                "canvas created".to_owned()
-                            } else {
-                                "canvas creation canceled".to_owned()
-                            }, PrintType::Output)
+                            print("creating canvas", PrintType::Output);
+                            print(match Canvas::new() {
+                                Some(canvas_new) => {
+                                    Canvas::display(&canvas_new);
+                                    canvas = Some(canvas_new);
+                                    "canvas created"
+                                },
+                                None => "canvas creation canceled",
+                            }, PrintType::Output);
                         },
                         KeyCode::Char('o') => {
-                            match input_file_name() {
-                                Some(name) => match Canvas::open(&name) {
-                                    Ok(canvas_) => {
-                                        Canvas::display(&canvas_);
-                                        print("file opened".to_owned(), PrintType::Output);
-                                        canvas = Some(canvas_);
-                                    },
-                                    Err(error) => print(error.to_string(), PrintType::Output),
+                            print("opening file", PrintType::Output);
+                            match Canvas::open() {
+                                Ok(canvas_new) => {
+                                    stdout().execute(terminal::Clear(terminal::ClearType::All)).unwrap();
+                                    Canvas::display(&canvas_new);
+                                    canvas = Some(canvas_new);
+                                    print("file opened", PrintType::Output);
                                 },
-                                None => print("file opening canceled".to_owned(), PrintType::Output),
+                                Err(error) => print(&error.to_string(), PrintType::Output),
                             }
                         },
-                        KeyCode::Char('s') => {
-                            if let Some(ref mut canvas) = canvas {
+                        KeyCode::Char('s') => match canvas {
+                            Some(ref mut canvas) => {
+                                print("saving file", PrintType::Output);
                                 match Canvas::save(canvas) {
-                                    Ok(_) => print("file saved".to_owned(), PrintType::Output),
-                                    Err(error) => print(error.to_string(), PrintType::Output),
+                                    Ok(_) => print("file saved", PrintType::Output),
+                                    Err(error) => print(&error.to_string(), PrintType::Output),
                                 }
-                            }
+                            },
+                            None => print("nothing to save", PrintType::Output),
                         },
                         KeyCode::Char('w') => {
-                            stdout().execute(terminal::Clear(terminal::ClearType::All)).unwrap();
-                            canvas = None;
+                            match canvas {
+                                Some(_) => {
+                                    canvas = None;
+                                    stdout().execute(terminal::Clear(terminal::ClearType::All)).unwrap();
+                                    print("canvas closed", PrintType::Output);
+                                    print_help();
+                                },
+                                None => print("nothing to close", PrintType::Output),
+                            }
+                            if let Some(_) = input {
+                                return None;
+                            }
                         },
                         KeyCode::F(4) => panic!("program terminated"),
                         _ => ()
