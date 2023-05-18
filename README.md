@@ -1,2 +1,3 @@
 # Draw
-Paint in command line
+A drawing tool runned from terminal.
+Allows creating fixed-size pixel-perfect bitmap images.
