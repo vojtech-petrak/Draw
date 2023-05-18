@@ -1,9 +1,13 @@
 use std::{
     cmp::{min, max},
-    io::{stdout, Write, Error, prelude::*, ErrorKind},
+    io::{stdout, Write, Error, prelude::*, ErrorKind, Seek, SeekFrom},
     fs::{File, OpenOptions},
 };
-use crossterm::{QueueableCommand, cursor};
+use crossterm::{
+    QueueableCommand,
+    cursor,
+    terminal,
+};
 use crate::utils::*;
 
 pub enum Direction {
@@ -43,25 +47,36 @@ impl Canvas {
             cursor: [0; 2]
         });
     }
-    pub fn open(name: &str) -> Result<Canvas, Error> {
-        let mut file: File = OpenOptions::new().read(true).write(true).open(&name)?;
-        let mut content: Vec<u8> = Vec::<u8>::new();
-
-        file.read_to_end(&mut content)?;
-        let span: [usize; 2] = [match content.pop() {
-            Some(dimension) => dimension,
-            None => return Err(ErrorKind::InvalidData.into()),
-        } as usize; 2];
-
-        return Ok(Canvas {
-            canvas_file: Some(CanvasFile { name: name.to_owned(), file: Some(file) } ),
-            span,
-            pixels: bytes_to_bits(&content),
-            position: [0; 2],
-            cursor: [0; 2]
-        });
+    pub fn open() -> Result<Canvas, Error> {
+        loop {
+            match input_file_name() {
+                Some(name) => match OpenOptions::new().read(true).write(true).open(&name) {
+                    Ok(mut file) => {
+                        let mut content: Vec<u8> = Vec::<u8>::new();
+                        file.read_to_end(&mut content)?;
+                        let span: [usize; 2] = [match content.pop() {
+                            Some(dimension) => dimension,
+                            None => return Err(ErrorKind::InvalidData.into()),
+                        } as usize; 2];
+    
+                        return Ok(Canvas {
+                            canvas_file: Some(CanvasFile { name: name.to_owned(), file: Some(file) } ),
+                            span,
+                            pixels: bytes_to_bits(&content),
+                            position: [0; 2],
+                            cursor: [0; 2],
+                        });
+                    },
+                    Err(error) => match error.kind() {
+                        ErrorKind::NotFound => print(&error.to_string(), PrintType::Output),
+                        _ => return Err(error),
+                    }
+                },
+                None => return Err(Error::new(ErrorKind::Other, "file opening canceled")),
+            }
+        }
     }
-    pub fn save(canvas: &mut Canvas) -> Result<Option<()>, Error> {
+    pub fn save(canvas: &mut Canvas) -> Result<(), Error> {
         match &canvas.canvas_file {
             Some(canvas_file) => if let None = canvas_file.file {
                 canvas.canvas_file = Some(CanvasFile {
@@ -76,15 +91,16 @@ impl Canvas {
                         name,
                     });
                 },
-                None => return Ok(None),
+                None => return Err(Error::new(ErrorKind::Other, "file saving canceled")),
             }
         };
         let mut content: Vec<u8> = bits_to_bytes(&canvas.pixels);
         content.push(canvas.span[Y] as u8);
         content.push(canvas.span[X] as u8);
 
+        canvas.canvas_file.as_ref().unwrap().file.as_ref().unwrap().seek(SeekFrom::Start(0))?;
         canvas.canvas_file.as_ref().unwrap().file.as_ref().unwrap().write_all(&content)?;
-        Ok(Some(()))
+        Ok(())
     }
 
     // output
@@ -108,7 +124,7 @@ impl Canvas {
         }
         stdout().flush().unwrap();
     }
-    pub fn shift(canvas: &mut Canvas, axis: usize, direction: Direction) -> Result<(), Error> {
+    pub fn shift(canvas: &mut Canvas, axis: usize, direction: Direction) {
         match direction {
             Direction::Start => if canvas.position[axis] != 0 {
                 canvas.position[axis] -= 1;
@@ -121,12 +137,11 @@ impl Canvas {
             }
         }
         Canvas::print(canvas);
-        Canvas::cursor_set(canvas)?;
+        Canvas::cursor_set(canvas).unwrap();
         print!("‡‡");
-        stdout().flush()?;
-        return Ok(());
+        stdout().flush().unwrap();
     }
-    pub fn cursor_move(canvas: &mut Canvas, axis: usize, direction: Direction) -> Result<(), Error> {
+    pub fn cursor_move(canvas: &mut Canvas, axis: usize, direction: Direction) {
         Canvas::cursor_set(canvas).unwrap();
         print!("{}", {
             if canvas.pixels[point_to_index(canvas.span[X], &canvas.cursor)] { "██" }
@@ -152,12 +167,12 @@ impl Canvas {
                 }
             },
         }
-        Canvas::cursor_set(canvas)?;
+        Canvas::cursor_set(canvas).unwrap();
         print!("‡‡");
-        stdout().flush()?;
-        return Ok(());
+        stdout().flush().unwrap();
     }
     pub fn display(canvas: &Canvas) {
+        stdout().queue(terminal::Clear(terminal::ClearType::All)).unwrap();
         Canvas::print(canvas);
         stdout().queue(cursor::MoveTo(0, 0)).unwrap();
         print!("‡‡");
